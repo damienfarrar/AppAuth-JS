@@ -154,4 +154,6 @@ export abstract class AuthorizationRequestHandler {
    * if not ready.
    */
   protected abstract completeAuthorizationRequest(): Promise<AuthorizationRequestResponse|null>;
+
+  abstract cancelAuthorizationRequest(): void;
 }

@@ -31,6 +31,7 @@ import opener = require('opener');
 class ServerEventsEmitter extends EventEmitter {
   static ON_UNABLE_TO_START = 'unable_to_start';
   static ON_AUTHORIZATION_RESPONSE = 'authorization_response';
+  static ON_AUTHORIZATION_CANCELLED = 'authorization_cancelled'
 }
 
 export class NodeBasedHandler extends AuthorizationRequestHandler {
@@ -39,6 +40,7 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
 
   /** The content for the authorization redirect response page. */
   protected authorizationRedirectPageContent = 'Close your browser to continue';
+  protected emitter = new ServerEventsEmitter();
 
   constructor(
       // default to port 8000
@@ -53,7 +55,7 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
       request: AuthorizationRequest) {
     // use opener to launch a web browser and start the authorization flow.
     // start a web server to handle the authorization response.
-    const emitter = new ServerEventsEmitter();
+    this.emitter = new ServerEventsEmitter();
 
     const requestHandler = (httpRequest: Http.IncomingMessage, response: Http.ServerResponse) => {
       if (!httpRequest.url) {
@@ -90,16 +92,16 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
         response: authorizationResponse,
         error: authorizationError
       } as AuthorizationRequestResponse;
-      emitter.emit(ServerEventsEmitter.ON_AUTHORIZATION_RESPONSE, completeResponse);
+      this.emitter.emit(ServerEventsEmitter.ON_AUTHORIZATION_RESPONSE, completeResponse);
       response.setHeader('Content-Type', 'text/html');
       response.end(this.authorizationRedirectPageContent);
     };
 
     this.authorizationPromise = new Promise<AuthorizationRequestResponse>((resolve, reject) => {
-      emitter.once(ServerEventsEmitter.ON_UNABLE_TO_START, () => {
+      this.emitter.once(ServerEventsEmitter.ON_UNABLE_TO_START, () => {
         reject(`Unable to create HTTP server at port ${this.httpServerPort}`);
       });
-      emitter.once(ServerEventsEmitter.ON_AUTHORIZATION_RESPONSE, (result: any) => {
+      this.emitter.once(ServerEventsEmitter.ON_AUTHORIZATION_RESPONSE, (result: any) => {
         // Set timeout for the server connections to 1 ms as we wish to close and end the server
         // as soon as possible. This prevents a user failing to close the redirect window from
         // causing a hanging process due to the server.
@@ -109,6 +111,12 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
         resolve(result as AuthorizationRequestResponse);
         // complete authorization flow
         this.completeAuthorizationRequestIfPossible();
+      });
+      this.emitter.once(ServerEventsEmitter.ON_AUTHORIZATION_CANCELLED, () => {
+        server.setTimeout(1);
+        server.close();
+        // resolve pending promise
+        reject(`Authorization Request Cancelled`);
       });
     });
 
@@ -123,7 +131,7 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
         })
         .catch((error) => {
           log('Something bad happened ', error);
-          emitter.emit(ServerEventsEmitter.ON_UNABLE_TO_START);
+          this.emitter.emit(ServerEventsEmitter.ON_UNABLE_TO_START);
         });
   }
 
@@ -134,5 +142,9 @@ export class NodeBasedHandler extends AuthorizationRequestHandler {
     }
 
     return this.authorizationPromise;
+  }
+
+  cancelAuthorizationRequest() {
+    this.emitter.emit(ServerEventsEmitter.ON_AUTHORIZATION_CANCELLED);
   }
 }

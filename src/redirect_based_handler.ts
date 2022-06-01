@@ -144,4 +144,6 @@ export class RedirectRequestHandler extends AuthorizationRequestHandler {
       }
     });
   }
+
+  cancelAuthorizationRequest() {}
 }

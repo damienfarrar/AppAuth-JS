@@ -71,6 +71,9 @@ let request = new AuthorizationRequest({
 
 // make the authorization request
 this.authorizationHandler.performAuthorizationRequest(this.configuration, request);
+
+// cancel the authorization request
+this.authorizationHandler.cancelAuthorizationRequest();
 ```
 
 ##### Making Token Requests
